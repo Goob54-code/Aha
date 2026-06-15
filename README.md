@@ -6,14 +6,16 @@ A very small first-person shooter that runs in any modern browser and is **fully
 
 **No download needed. Works on your phone.**
 
-- **Play (live site):** **https://goob54-code.github.io/Aha/**
+### **https://goob54-code.github.io/Aha/**
 
-  This goes live automatically once the change is merged. Tap it on your phone and the game opens full-screen — press **PLAY** and go.
+Tap it on your phone and the game opens full-screen — press **PLAY** and go.
 
-- **Play instantly from this branch (before merge):**
-  https://htmlpreview.github.io/?https://raw.githubusercontent.com/Goob54-code/Aha/claude/mobile-fps-game-ih4797/index.html
-
-> Tip on mobile: after it loads, use **Add to Home Screen** in your browser menu to get a full-screen, app-like version.
+> Requires the repo to be **public** (GitHub Pages can't serve a free, link-shareable
+> site from a private repo). The page is published automatically by the GitHub Pages
+> workflow in `.github/workflows/pages.yml`.
+>
+> Mobile tip: after it loads, use **Add to Home Screen** in your browser menu to get
+> a full-screen, app-like version.
 
 ### Or run it locally
 
