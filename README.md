@@ -1,29 +1,44 @@
 # MiniDoom — a tiny FPS
 
-A very small first-person shooter that runs in any modern browser and is fully playable on mobile. It's a self-contained raycaster (Wolfenstein/Doom style) in a single `index.html` — no build step, no dependencies.
+A very small first-person shooter that runs in any modern browser and is **fully playable on mobile**. It's a self-contained raycaster (Wolfenstein/Doom style) in a single `index.html` — no build step, no dependencies, no install.
 
-## Play
+## ▶️ Play now — just tap the link
 
-Just open `index.html` in a browser, or serve the folder:
+**No download needed. Works on your phone.**
+
+- **Play (live site):** **https://goob54-code.github.io/Aha/**
+
+  This goes live automatically once the change is merged. Tap it on your phone and the game opens full-screen — press **PLAY** and go.
+
+- **Play instantly from this branch (before merge):**
+  https://htmlpreview.github.io/?https://raw.githubusercontent.com/Goob54-code/Aha/claude/mobile-fps-game-ih4797/index.html
+
+> Tip on mobile: after it loads, use **Add to Home Screen** in your browser menu to get a full-screen, app-like version.
+
+### Or run it locally
+
+Download `index.html` and open it in any browser, or serve the folder:
 
 ```bash
 python3 -m http.server 8000
 # then visit http://localhost:8000
 ```
 
+## Goal
+
 Press **PLAY** and clear the level of all 8 enemies before they wear down your health.
 
 ## Controls
+
+**Mobile / touch**
+- Move: the left on-screen joystick
+- Look: drag anywhere on the right side of the screen
+- Shoot: the **FIRE** button
 
 **Desktop**
 - Move: `W` `A` `S` `D` or arrow keys
 - Look: move the mouse (click the canvas to lock the pointer)
 - Shoot: left click or `Space`
-
-**Mobile / touch**
-- Move: left on-screen joystick
-- Look: drag anywhere on the right side of the screen
-- Shoot: the **FIRE** button
 
 ## How it works
 
@@ -32,4 +47,4 @@ Press **PLAY** and clear the level of all 8 enemies before they wear down your h
 - **Hitscan shooting** with light aim assist picks the nearest enemy near your crosshair that isn't behind a wall.
 - Enemies chase you when they have line of sight and damage you up close.
 
-Everything lives in `index.html`.
+Everything lives in `index.html`. The live site is published from `main` by the GitHub Pages workflow in `.github/workflows/pages.yml`.
