@@ -222,6 +222,71 @@
   let firing = false;
   let shootCooldown = 0;
   const isTouch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+  let hurtSndCd = 0;
+
+  // ---------- Audio (synthesized, no asset files) ----------
+  let actx = null;
+  function initAudio() {
+    if (actx) { if (actx.state === "suspended") actx.resume(); return; }
+    try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; }
+  }
+  function tone(freq, dur, type, vol, sweepTo) {
+    if (!actx) return;
+    const t = actx.currentTime;
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || "square";
+    o.frequency.setValueAtTime(freq, t);
+    if (sweepTo) o.frequency.exponentialRampToValueAtTime(Math.max(1, sweepTo), t + dur);
+    g.gain.setValueAtTime(vol || 0.2, t);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(dur, vol) {
+    if (!actx) return;
+    const t = actx.currentTime;
+    const n = Math.max(1, Math.floor(actx.sampleRate * dur));
+    const buf = actx.createBuffer(1, n, actx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);
+    const src = actx.createBufferSource(); src.buffer = buf;
+    const g = actx.createGain(); g.gain.value = vol || 0.3;
+    src.connect(g); g.connect(actx.destination); src.start(t);
+  }
+  function sndShot(w) {
+    if (w === 1) { noise(0.2, 0.4); tone(170, 0.13, "sawtooth", 0.16, 55); }
+    else if (w === 2) { noise(0.05, 0.2); tone(420, 0.04, "square", 0.12); }
+    else { noise(0.07, 0.24); tone(330, 0.07, "square", 0.14, 120); }
+  }
+  function sndHit() { tone(220, 0.06, "square", 0.13, 90); }
+  function sndDeath() { tone(160, 0.3, "sawtooth", 0.2, 38); noise(0.25, 0.18); }
+  function sndPickup() { tone(520, 0.09, "square", 0.18); setTimeout(() => tone(790, 0.12, "square", 0.18), 85); }
+  function sndHurt() { tone(120, 0.18, "sawtooth", 0.22, 55); }
+  function sndWin() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.18, "triangle", 0.2), i * 120)); }
+  function sndLose() { [330, 247, 196, 131].forEach((f, i) => setTimeout(() => tone(f, 0.26, "sawtooth", 0.2), i * 150)); }
+
+  // ---------- Enemy pathfinding: BFS flow field from the player's cell ----------
+  const ENEMY_ACTIVATE = 16;
+  const flow = new Int16Array(MW * MH);
+  function computeFlow() {
+    flow.fill(-1);
+    const px = Math.max(0, Math.min(MW - 1, player.x | 0));
+    const py = Math.max(0, Math.min(MH - 1, player.y | 0));
+    if (MAP[py][px] === 1) return;
+    flow[py * MW + px] = 0;
+    const q = [px + py * MW];
+    let head = 0;
+    while (head < q.length) {
+      const cur = q[head++], cx = cur % MW, cy = (cur / MW) | 0, cd = flow[cur];
+      if (cd >= ENEMY_ACTIVATE) continue;
+      for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + ox, ny = cy + oy;
+        if (nx < 0 || ny < 0 || nx >= MW || ny >= MH || MAP[ny][nx] === 1) continue;
+        const ni = ny * MW + nx;
+        if (flow[ni] === -1) { flow[ni] = cd + 1; q.push(ni); }
+      }
+    }
+  }
 
   // ---------- Spawning helpers ----------
   function randomOpenCell(minDistFromPlayer, others, minDistOthers) {
@@ -262,9 +327,10 @@
   }
 
   function startGame() {
+    initAudio();
     player.x = 1.5; player.y = 1.5; player.a = 0; player.hp = 100;
     player.weapon = 0; player.owned = [true, false, false]; player.ammo = [Infinity, 0, 0];
-    score = 0; firing = false; shootCooldown = 0;
+    score = 0; firing = false; shootCooldown = 0; hurtSndCd = 0;
     spawnEntities();
     updateHUD();
     running = true;
@@ -275,6 +341,7 @@
 
   function endGame(won) {
     running = false; firing = false;
+    if (won) sndWin(); else sndLose();
     overlay.classList.remove("hidden");
     introText.classList.add("hidden");
     finalStats.classList.remove("hidden");
@@ -347,7 +414,6 @@
     document.getElementById("touch").style.display = "block";
     fireBtn.style.display = "flex";
     swapBtn.style.display = "flex";
-    document.getElementById("lookHint").style.display = "block";
 
     moveStick.addEventListener("touchstart", onMoveStart, { passive: false });
     moveStick.addEventListener("touchmove", onMoveMove, { passive: false });
@@ -412,6 +478,7 @@
     shootCooldown = w.cooldown;
     muzzleTimer = 0.06;
     flashMuzzle();
+    sndShot(player.weapon);
     if (player.ammo[player.weapon] !== Infinity) {
       player.ammo[player.weapon]--;
     }
@@ -441,7 +508,8 @@
     }
     if (best) {
       best.hp -= w.dmg; best.hitTimer = 0.15;
-      if (best.hp <= 0) { best.alive = false; score += 100; }
+      if (best.hp <= 0) { best.alive = false; score += 100; sndDeath(); }
+      else sndHit();
     }
   }
 
@@ -460,6 +528,7 @@
   function update(dt) {
     if (shootCooldown > 0) shootCooldown -= dt;
     if (muzzleTimer > 0) muzzleTimer -= dt;
+    if (hurtSndCd > 0) hurtSndCd -= dt;
     if (firing && WEAPONS[player.weapon].auto) tryShoot();
 
     if (keys["ArrowLeft"]) player.a -= player.turn * dt;
@@ -489,7 +558,8 @@
       if (Math.hypot(pk.x - player.x, pk.y - player.y) < 0.55) collect(pk);
     }
 
-    // Enemies
+    // Enemies — hunt the player through the maze via a BFS flow field
+    computeFlow();
     for (const e of enemies) {
       if (!e.alive) continue;
       if (e.hitTimer > 0) e.hitTimer -= dt;
@@ -498,21 +568,44 @@
       const dist = Math.hypot(dx, dy);
       if (dist < 0.6) {
         player.hp -= 18 * dt;
+        if (hurtSndCd <= 0) { sndHurt(); hurtSndCd = 0.45; }
         if (player.hp <= 0) { player.hp = 0; updateHUD(); endGame(false); return; }
         updateHUD();
-      } else if (dist < 9 && !wallBetween(e.x, e.y, player.x, player.y)) {
-        const sp = 1.35 * dt;
-        const nx = e.x + (dx / dist) * sp;
-        const ny = e.y + (dy / dist) * sp;
-        if (!isWall(nx, e.y)) e.x = nx;
-        if (!isWall(e.x, ny)) e.y = ny;
+        continue;
       }
+      // Pick a target: walk straight if there's clear line of sight, otherwise
+      // follow the flow field downhill toward the player around corners.
+      let tx, ty;
+      if (dist < 9 && !wallBetween(e.x, e.y, player.x, player.y)) {
+        tx = player.x; ty = player.y;
+      } else {
+        const ex = e.x | 0, ey = e.y | 0;
+        const d0 = flow[ey * MW + ex];
+        if (d0 < 0) continue; // out of activation range / unreachable
+        let best = null, bd = d0;
+        for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = ex + ox, ny = ey + oy;
+          if (nx < 0 || ny < 0 || nx >= MW || ny >= MH) continue;
+          const fd = flow[ny * MW + nx];
+          if (fd >= 0 && fd < bd) { bd = fd; best = [nx + 0.5, ny + 0.5]; }
+        }
+        if (!best) continue;
+        tx = best[0]; ty = best[1];
+      }
+      const tdx = tx - e.x, tdy = ty - e.y;
+      const tl = Math.hypot(tdx, tdy) || 1;
+      const sp = 1.45 * dt;
+      const nx = e.x + (tdx / tl) * sp;
+      const ny = e.y + (tdy / tl) * sp;
+      if (!isWall(nx, e.y)) e.x = nx;
+      if (!isWall(e.x, ny)) e.y = ny;
     }
   }
 
   function collect(pk) {
     pk.taken = true;
     pickFlash();
+    sndPickup();
     if (pk.type === "shotgun") { player.owned[1] = true; player.ammo[1] += 24; selectWeapon(1); toast("SHOTGUN!  +24 shells"); }
     else if (pk.type === "smg") { player.owned[2] = true; player.ammo[2] += 80; selectWeapon(2); toast("SMG!  +80 rounds"); }
     else if (pk.type === "ammo") { if (player.owned[1]) player.ammo[1] += 12; if (player.owned[2]) player.ammo[2] += 40; toast("AMMO"); }
@@ -603,6 +696,40 @@
     }
 
     drawGun();
+    drawMinimap();
+  }
+
+  // ---------- Minimap (top-right) ----------
+  function drawMinimap() {
+    const cell = Math.max(3, Math.min(6, Math.floor(W / 150)));
+    const mw = MW * cell, mh = MH * cell;
+    const ox = W - mw - 12, oy = 12;
+    ctx.save();
+    ctx.globalAlpha = 0.82;
+    ctx.fillStyle = "#0a0a12";
+    ctx.fillRect(ox - 3, oy - 3, mw + 6, mh + 6);
+    ctx.fillStyle = "#3a3552";
+    for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
+      if (MAP[y][x] === 1) ctx.fillRect(ox + x * cell, oy + y * cell, cell, cell);
+    }
+    for (const p of pickups) {
+      if (p.taken) continue;
+      ctx.fillStyle = p.type === "health" ? "#ff5a6a" : (p.type === "ammo" ? "#f2c94c" : "#7ad0ff");
+      ctx.fillRect(ox + p.x * cell - cell * 0.4, oy + p.y * cell - cell * 0.4, cell * 0.8, cell * 0.8);
+    }
+    ctx.fillStyle = "#ff3b3b";
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      ctx.fillRect(ox + e.x * cell - cell * 0.45, oy + e.y * cell - cell * 0.45, cell * 0.9, cell * 0.9);
+    }
+    ctx.fillStyle = "#7CFC00";
+    ctx.beginPath(); ctx.arc(ox + player.x * cell, oy + player.y * cell, cell * 0.65, 0, 7); ctx.fill();
+    ctx.strokeStyle = "#7CFC00"; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(ox + player.x * cell, oy + player.y * cell);
+    ctx.lineTo(ox + (player.x + Math.cos(player.a) * 1.8) * cell, oy + (player.y + Math.sin(player.a) * 1.8) * cell);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // Clip drawing to columns where the sprite is in front of the wall -> smooth occlusion (no pop-in)
